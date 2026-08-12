@@ -1,0 +1,30 @@
+# ─── Secrets ─────────────────────────────────
+# DO API token for Traefik DNS-01 challenge
+traefik/.env
+
+# Let's Encrypt cert private keys
+traefik/letsencrypt/
+
+# Traefik dashboard basic-auth (contains bcrypt hash)
+traefik/dynamic.yml
+
+# ─── Runtime state ───────────────────────────
+# Live WordPress sites — user data, not infra code
+sites/
+
+# newsite/killsite event log
+sites.log
+
+# ─── Editor / OS junk ────────────────────────
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*~
+
+# ─── Never commit these by accident ──────────
+*.pem
+*.key
+*.crt
+*_rsa
+*_ed25519

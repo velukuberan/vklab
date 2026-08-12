@@ -1,0 +1,53 @@
+services:
+  db:
+    image: mariadb:${MARIADB_VERSION}
+    container_name: __SITE__-db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - internal
+
+  wordpress:
+    image: wordpress:${WP_IMAGE_TAG}
+    container_name: __SITE__-wp
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD}
+      # Enable debug logging (useful for mail troubleshooting)
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_DEBUG', true);
+        define('WP_DEBUG_LOG', true);
+        define('WP_DEBUG_DISPLAY', false);
+    volumes:
+      - wp_files:/var/www/html
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.__SITE__.rule=Host(`__SITE__.test.vkuberan.in`)"
+      - "traefik.http.routers.__SITE__.entrypoints=websecure"
+      - "traefik.http.routers.__SITE__.tls=true"
+      - "traefik.http.routers.__SITE__.tls.certresolver=letsencrypt"
+      - "traefik.http.services.__SITE__.loadbalancer.server.port=80"
+
+volumes:
+  db_data:
+  wp_files:
+
+networks:
+  internal:
+  web:
+    external: true

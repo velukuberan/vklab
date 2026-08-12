@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+#
+# killsite — destroy a site: stop containers, delete volumes, remove folder
+# Usage: killsite <name>
+# Example: killsite wp1
+
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# Config
+# -----------------------------------------------------------------------------
+TESTLAB="/opt/testlab"
+SITES="$TESTLAB/sites"
+SITES_LOG="$TESTLAB/sites.log"
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+die() { echo "❌ $*" >&2; exit 1; }
+info() { echo "▶ $*"; }
+ok() { echo "✅ $*"; }
+
+# -----------------------------------------------------------------------------
+# Argument validation
+# -----------------------------------------------------------------------------
+[[ $# -eq 1 ]] || die "Usage: killsite <name>
+Example: killsite wp1"
+
+SITE="$1"
+SITE_DIR="$SITES/$SITE"
+
+[[ -d "$SITE_DIR" ]] || die "Site '$SITE' does not exist at $SITE_DIR"
+
+# -----------------------------------------------------------------------------
+# Show what will be destroyed
+# -----------------------------------------------------------------------------
+echo ""
+echo "⚠  About to PERMANENTLY DESTROY site '$SITE':"
+echo ""
+echo "   Folder:     $SITE_DIR"
+echo ""
+echo "   Containers:"
+docker ps -a --filter "label=com.docker.compose.project=$SITE" \
+    --format "     - {{.Names}} ({{.Status}})" 2>/dev/null || echo "     (none found)"
+echo ""
+echo "   Volumes:"
+docker volume ls --filter "label=com.docker.compose.project=$SITE" \
+    --format "     - {{.Name}}" 2>/dev/null || echo "     (none found)"
+echo ""
+echo "   Networks:"
+docker network ls --filter "label=com.docker.compose.project=$SITE" \
+    --format "     - {{.Name}}" 2>/dev/null || echo "     (none found)"
+echo ""
+echo "   ALL DATA WILL BE LOST — this cannot be undone."
+echo ""
+
+# -----------------------------------------------------------------------------
+# Confirmation
+# -----------------------------------------------------------------------------
+read -rp "Type the site name '$SITE' to confirm: " CONFIRM
+[[ "$CONFIRM" == "$SITE" ]] || die "Cancelled (you typed: '$CONFIRM')"
+
+# -----------------------------------------------------------------------------
+# Destroy
+# -----------------------------------------------------------------------------
+info "Stopping containers and removing volumes..."
+cd "$SITE_DIR"
+docker compose down -v --remove-orphans
+
+info "Removing site folder..."
+cd /
+rm -rf "$SITE_DIR"
+
+# -----------------------------------------------------------------------------
+# Log the destroy event
+# -----------------------------------------------------------------------------
+echo "$(date '+%Y-%m-%d %H:%M:%S')  DESTROY $SITE" >> "$SITES_LOG"
+
+ok "Site '$SITE' destroyed cleanly."

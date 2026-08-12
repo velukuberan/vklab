@@ -1,0 +1,30 @@
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    restart: unless-stopped
+    environment:
+      # Store caught mail on disk so it survives restarts
+      MP_DATA_FILE: /data/mailpit.db
+      # Retain last 500 messages (auto-cleanup older)
+      MP_MAX_MESSAGES: 500
+    volumes:
+      - mailpit_data:/data
+    networks:
+      - web
+    labels:
+      # Traefik routing for the web UI (port 8025)
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.mailpit.rule=Host(`mail.test.vkuberan.in`)"
+      - "traefik.http.routers.mailpit.entrypoints=websecure"
+      - "traefik.http.routers.mailpit.tls=true"
+      - "traefik.http.routers.mailpit.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mailpit.loadbalancer.server.port=8025"
+
+volumes:
+  mailpit_data:
+
+networks:
+  web:
+    external: true
