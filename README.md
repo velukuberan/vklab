@@ -34,13 +34,26 @@ Shared services (Traefik reverse proxy, Mailpit email catcher) route traffic and
       +-----+        +-----+       +---------+    +-------+
                        Docker network: web
 
+## Getting Started
+
+Follow the docs in order for a fresh install or full restore:
+
+1. [Prerequisites](docs/01-prerequisites.md) - what you need before starting
+2. [Server setup](docs/02-server-setup.md) - Ubuntu, Docker, UFW, swap, user
+3. [DNS setup](docs/03-dns-setup.md) - delegating a subdomain to your cloud DNS
+4. [Testlab install](docs/04-testlab-install.md) - clone repo, secrets, start services
+5. [Daily usage](docs/05-daily-usage.md) - creating and destroying sites
+6. [Disaster recovery](docs/06-disaster-recovery.md) - restoring from a total loss
+7. [Troubleshooting](docs/07-troubleshooting.md) - things that broke and how to fix them
+
 ## Status
 
-Work in progress. README will be expanded as the setup stabilizes.
+Work in progress. Currently running on DigitalOcean but designed to be cloud-agnostic - see individual docs for the shallow assumptions.
 
-See individual directories for now:
+Repo layout:
 
-- traefik/    - reverse proxy + wildcard HTTPS
+- traefik/    - reverse proxy + wildcard HTTPS config
 - mailpit/    - shared email catcher
 - templates/wordpress/ - per-site compose template
 - bin/        - newsite, killsite, siteinfo scripts
+- docs/       - setup and usage documentation
