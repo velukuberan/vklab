@@ -1,0 +1,12 @@
+# Traefik dynamic config — dashboard basic-auth
+# Generate the bcrypt hash with:
+#   htpasswd -nbB admin 'your-strong-password'
+# Then paste the full "user:hash" line below
+# In this file, single $ is correct (unlike docker-compose labels which need $$)
+
+http:
+  middlewares:
+    dashboard-auth:
+      basicAuth:
+        users:
+          - "admin:REPLACE_WITH_BCRYPT_HASH"
