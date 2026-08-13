@@ -26,6 +26,24 @@ If you copied the hash between the two and forgot to adjust, login fails silentl
 
 **"randstr: SIGPIPE"** - happens when bash `pipefail` combines with `/dev/urandom | head -c`. The `head` closes the pipe early, `urandom` gets SIGPIPE, and pipefail treats it as an error. Fix in the script: temporarily disable pipefail around that line, or use `tr -dc 'A-Za-z0-9' < /dev/urandom | head -c N` which handles it more gracefully. Already fixed in `newsite`.
 
+## newsite hangs at "Waiting for..."
+
+If newsite prints "Waiting for https://<site>.test.<domain> to respond..." and never proceeds, one of two things is happening:
+
+**Site actually isn't up.** Check `docker ps | grep <site>-wp` — if the container isn't running, look at `docker logs <site>-wp`.
+
+**Site is up but curl-from-droplet can't reach it.** This is hairpin NAT: Docker doesn't permit a container to reach the host's own public IP via loopback. The site works fine from a browser (external network) but hangs from the droplet itself.
+
+Verify by testing both paths from the droplet:
+
+    # This will hang if hairpin is the issue
+    curl -kI https://wp1.test.yourdomain.com
+
+    # This bypasses the loop — should return 200/302 instantly
+    curl -kI --resolve wp1.test.yourdomain.com:443:127.0.0.1 https://wp1.test.yourdomain.com
+
+If the second one works and the first doesn't → hairpin. `newsite` already handles this with `--resolve`, so if you're seeing this in the wait loop it means someone edited that line out. Restore it.
+
 ## SSL cert has the wrong name
 
 If the browser shows a warning that the cert doesn't match the hostname, Traefik probably fell back to the default self-signed cert because the wildcard cert wasn't issued yet. Check `docker compose logs traefik | grep -i acme` for errors. Common causes:

@@ -40,6 +40,19 @@ Two quality-of-life fixes for working with the GitHub remote from the droplet:
 1. **`keychain`** — type the SSH key passphrase once per boot, not once per push
 2. **SSH commit signing** — get the green "Verified" badge on GitHub
 
+**Note for tmux users:** tmux caches environment variables from whatever shell started the session. If you set up keychain *after* tmux was already running, existing tmux windows will still prompt for the passphrase. Fix:
+
+```bash
+tmux set-environment -g SSH_AUTH_SOCK "$SSH_AUTH_SOCK"
+tmux set-environment -g SSH_AGENT_PID "$SSH_AGENT_PID"
+```
+
+Then add this line to `~/.tmux.conf` so new sessions inherit automatically:
+
+```
+set -g update-environment "SSH_AUTH_SOCK SSH_AGENT_PID DISPLAY"
+```
+
 ### 1. Silence the SSH key passphrase with `keychain`
 
 ```bash
@@ -180,7 +193,7 @@ Verify at `https://mail.test.yourdomain.com` - you should see an empty inbox.
 
 ## Test with a real site
 
-    newsite wp1
+    newsite wordpress wp1
 
 Wait about 30 seconds, then visit `https://wp1.test.yourdomain.com`. You should land on the WordPress installer.
 

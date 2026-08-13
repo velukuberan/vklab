@@ -9,7 +9,7 @@ Currently supports WordPress. Django and FastAPI templates planned.
 One command creates a full stack behind HTTPS with a real cert:
 
     newsite wp1
-    # -> https://wp1.test.vkuberan.in is live in ~30 seconds
+    # -> https://wp1.test.vkuberan.in is live in ~10 seconds
 
 One command tears it down:
 

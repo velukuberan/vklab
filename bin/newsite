@@ -169,23 +169,33 @@ docker compose up -d
 
 # -----------------------------------------------------------------------------
 # Wait for WordPress to respond
+#
+# Why --resolve? Docker's NAT does not permit a container to reach the host's
+# own public IP via loopback (hairpin NAT). curl from the droplet to the site's
+# public URL would hang. --resolve routes curl straight to Traefik on 127.0.0.1
+# instead. Without this, the wait loop hangs on every restore regardless of
+# DNS or cert state. Do not remove.
 # -----------------------------------------------------------------------------
 URL="https://${SITE}.${BASE_DOMAIN}"
 info "Waiting for $URL to respond..."
 
+WAIT_INTERVAL=2
+WAIT_MAX_ATTEMPTS=60
+WAIT_TIMEOUT=$((WAIT_INTERVAL * WAIT_MAX_ATTEMPTS))
+
 WP_READY=false
-for i in {1..30}; do
+for _ in $(seq 1 "$WAIT_MAX_ATTEMPTS"); do
     if curl -sfk -o /dev/null -w '%{http_code}' \
         --resolve "${SITE}.${BASE_DOMAIN}:443:127.0.0.1" \
         "$URL" | grep -qE '^(200|301|302)$'; then
         WP_READY=true
         break
     fi
-    sleep 2
+    sleep "$WAIT_INTERVAL"
 done
 
 if ! $WP_READY; then
-    die "Containers are up but $URL didn't respond within 60s. Check logs with: docker logs ${SITE}-wp"
+    die "Containers are up but $URL didn't respond within ${WAIT_TIMEOUT}s. Check logs with: docker logs ${SITE}-wp"
 fi
 
 # -----------------------------------------------------------------------------

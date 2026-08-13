@@ -4,19 +4,18 @@ Three commands run the whole show: `newsite`, `killsite`, `siteinfo`.
 
 ## Create a site
 
-    newsite wp1
+    newsite wordpress wp1
 
-Creates a WordPress site at `https://wp1.test.yourdomain.com` with the latest WordPress and PHP 8.3. Ready in about 30 seconds.
+Creates a WordPress site at `https://wp1.test.yourdomain.com` with the latest WordPress and PHP 8.3. Ready in about 10 seconds.
 
 You can pin versions:
 
-    newsite wp2 --wp 6.4 --php 8.1
+    newsite wordpress wp2 --wp 6.4 --php 8.1
 
 Available flags:
 
 - `--wp <version>` - WordPress version (default: latest)
 - `--php <version>` - PHP version, must be one supported by the WordPress image
-- `--force` - overwrite an existing site with the same name
 
 The script auto-installs WordPress via WP-CLI, so the site is fully configured on first load - no manual installer walkthrough.
 
