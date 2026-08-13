@@ -34,6 +34,21 @@ Shared services (Traefik reverse proxy, Mailpit email catcher) route traffic and
       +-----+        +-----+       +---------+    +-------+
                        Docker network: web
 
+## Commands
+
+Every command below is in `bin/` and symlinked to `/usr/local/bin/` during install.
+
+| Command | Purpose |
+|---|---|
+| `newsite wordpress <name>` | Create a new WordPress site (see `bin/newsite -h` for flags) |
+| `killsite <name>` | Destroy a site permanently (containers, volumes, folder) |
+| `siteinfo` | List all sites |
+| `siteinfo <name>` | Show credentials + status for one site |
+| `siteinfo <name> --password-only` | Print just the admin password (pipe-friendly) |
+| `health-check` | Post-restore sanity check (DNS, containers, cert) |
+
+For daily workflow details, see [docs/05-daily-usage.md](docs/05-daily-usage.md).
+
 ## Getting Started
 
 Follow the docs in order for a fresh install or full restore:

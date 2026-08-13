@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# health-check — quick post-restore sanity check
+# Usage: health-check
+set -euo pipefail
+
+BASE_DOMAIN="test.vkuberan.in"
+
+echo "=== Testlab health check ==="
+echo ""
+
+# 1. What IP is this droplet?
+LOCAL_IP=$(curl -s -4 icanhazip.com 2>/dev/null || echo "unknown")
+echo "Droplet public IP:     $LOCAL_IP"
+
+# 2. What does DNS say?
+DNS_IP=$(dig +short "traefik.${BASE_DOMAIN}" | head -1)
+echo "DNS traefik.$BASE_DOMAIN: $DNS_IP"
+
+if [[ "$LOCAL_IP" != "$DNS_IP" ]]; then
+    echo ""
+    echo "⚠  DNS does not match this droplet. Update A records in DigitalOcean."
+    echo "   See docs/06-disaster-recovery.md → 'First step on every restore'"
+else
+    echo "✓ DNS matches droplet IP"
+fi
+
+echo ""
+echo "=== Containers ==="
+docker ps --format 'table {{.Names}}\t{{.Status}}' 2>/dev/null || echo "Docker not running"
+
+echo ""
+echo "=== Cert check (via localhost, bypasses hairpin) ==="
+CERT_INFO=$(echo | timeout 5 openssl s_client -connect 127.0.0.1:443 \
+    -servername "traefik.${BASE_DOMAIN}" 2>/dev/null | \
+    openssl x509 -noout -subject -dates 2>/dev/null || echo "no cert / traefik down")
+echo "$CERT_INFO"

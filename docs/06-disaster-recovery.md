@@ -1,5 +1,37 @@
 # 06 - Disaster recovery
 
+## First step on every restore: update DNS
+
+**Do this before anything else.** After creating the droplet from snapshot, DigitalOcean assigns a new public IPv4. Every subdomain (`traefik`, `mail`, and every `wpN` site) will be unreachable until DNS points to the new IP.
+
+### Steps
+
+1. In DigitalOcean → **Droplets** → your restored droplet → copy the **Public IPv4** (top-right).
+
+2. In DigitalOcean → **Networking → Domains → test.vkuberan.in**.
+
+3. Update every A record to the new IP:
+   - `*` (wildcard) → new IP
+   - `@` (apex, if present) → new IP
+   - Any individually-named records (e.g. `traefik`, `mail`) — usually not needed if `*` covers them, but check.
+
+4. Verify from your laptop:
+
+        dig +short traefik.test.vkuberan.in
+        # should return the new IP within ~60 seconds
+
+5. Only after `dig` returns the new IP → proceed to SSH into the droplet and start work.
+
+### Why this matters
+
+- Skipping this step means "nothing works" on the restored droplet — Traefik dashboard, mailpit, every WP site — because DNS points to the old dead IP.
+- Diagnosing without knowing about this can burn 30+ minutes chasing symptoms that look like Traefik / cert / networking bugs.
+- Docker containers themselves come up fine; the problem is entirely on the DNS side.
+
+### One future upgrade
+
+A DigitalOcean **Floating IP** eliminates this step entirely — attach it to whichever droplet is current, DNS never changes. It's free while attached to a droplet ($4/mo only during unattached periods). Consider it if destroy-restore becomes a weekly habit.
+
 "Disaster" here means: the server is gone, the snapshot is gone, and all you have is this git repo. The goal is a working testlab from nothing in about 30-45 minutes.
 
 Sites you had running are not recoverable this way - `sites/` is excluded from git because it's user data, not infrastructure. If you want that too, keep a separate backup of `sites/` somewhere (S3, another server, a snapshot of just that directory).
