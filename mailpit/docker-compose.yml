@@ -19,7 +19,6 @@ services:
       - "traefik.http.routers.mailpit.rule=Host(`mail.test.vkuberan.in`)"
       - "traefik.http.routers.mailpit.entrypoints=websecure"
       - "traefik.http.routers.mailpit.tls=true"
-      - "traefik.http.routers.mailpit.tls.certresolver=dnsresolver"
       - "traefik.http.services.mailpit.loadbalancer.server.port=8025"
 
 volumes:
