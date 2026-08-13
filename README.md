@@ -45,6 +45,11 @@ Every command below is in `bin/` and symlinked to `/usr/local/bin/` during insta
 | `siteinfo` | List all sites |
 | `siteinfo <name>` | Show credentials + status for one site |
 | `siteinfo <name> --password-only` | Print just the admin password (pipe-friendly) |
+| `siteshell <name>` | Bash shell in the site's WordPress container |
+| `siteshell <name> --db` | MariaDB shell in the site's DB container |
+| `siteshell <name> --wpcli [cmd]` | Interactive WP-CLI, or one-shot WP-CLI command |
+| `siteshell <name> --upload-plugin <path>` | Upload a plugin (dir or .zip) |
+| `siteshell <name> --upload-theme <path>` | Upload a theme (dir or .zip) |
 | `health-check` | Post-restore sanity check (DNS, containers, cert) |
 
 For daily workflow details, see [docs/05-daily-usage.md](docs/05-daily-usage.md).

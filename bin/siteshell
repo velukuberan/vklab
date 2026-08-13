@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+#
+# siteshell — exec into a testlab site's containers, or upload plugins/themes
+#
+# Usage: siteshell <site> [option]
+#
+# Default:
+#   siteshell <site>                        bash shell in <site>-wp
+#
+# Options:
+#   --db                                    mariadb shell in <site>-db
+#   --wpcli [args...]                       WP-CLI (interactive if no args, else runs the command)
+#   --upload-plugin <path>                  upload plugin dir or .zip into <site>
+#   --upload-theme  <path>                  upload theme dir or .zip into <site>
+#   -h, --help                              show this help
+#
+# Examples:
+#   siteshell wp1
+#   siteshell wp1 --db
+#   siteshell wp1 --wpcli
+#   siteshell wp1 --wpcli plugin list
+#   siteshell wp1 --upload-plugin ~/downloads/my-plugin
+#   siteshell wp1 --upload-theme  ~/downloads/twentytwentyfive.zip
+
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# Config
+# -----------------------------------------------------------------------------
+TESTLAB="/opt/testlab"
+SITES_DIR="$TESTLAB/sites"
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+die() { echo "❌ $*" >&2; exit 1; }
+info() { echo "▶ $*"; }
+ok() { echo "✅ $*"; }
+
+usage() {
+    sed -n '3,25p' "$0" | sed 's/^# \?//'
+}
+
+running() {
+    docker ps --format '{{.Names}}' | grep -q "^$1\$"
+}
+
+# -----------------------------------------------------------------------------
+# Argument parsing
+# -----------------------------------------------------------------------------
+[[ $# -lt 1 ]] && { usage; exit 1; }
+case "$1" in -h|--help) usage; exit 0 ;; esac
+
+SITE="$1"; shift
+SITE_DIR="$SITES_DIR/$SITE"
+WP_CTR="${SITE}-wp"
+DB_CTR="${SITE}-db"
+ENV_FILE="$SITE_DIR/.env"
+
+# -----------------------------------------------------------------------------
+# Validation
+# -----------------------------------------------------------------------------
+[[ -d "$SITE_DIR" ]] || die "Site '$SITE' not found at $SITE_DIR"
+
+running "$WP_CTR" || die "Container '$WP_CTR' is not running.
+Start with: cd $SITE_DIR && docker compose up -d"
+
+# -----------------------------------------------------------------------------
+# Dispatch on mode
+# -----------------------------------------------------------------------------
+MODE="${1:-shell}"
+
+case "$MODE" in
+
+    # -------------------------------------------------------------------------
+    # Default: bash shell in the WP container
+    # -------------------------------------------------------------------------
+    shell)
+        exec docker exec -it "$WP_CTR" bash
+        ;;
+
+    # -------------------------------------------------------------------------
+    # MariaDB shell in the DB container
+    # -------------------------------------------------------------------------
+    --db)
+        running "$DB_CTR" || die "Container '$DB_CTR' is not running."
+        [[ -r "$ENV_FILE" ]] || die "Cannot read $ENV_FILE"
+
+        # Source DB_PASSWORD from .env (safe: known-shape file we generated)
+        DB_PASSWORD=$(grep '^DB_PASSWORD=' "$ENV_FILE" | cut -d= -f2)
+        [[ -n "$DB_PASSWORD" ]] || die "DB_PASSWORD not found in $ENV_FILE"
+
+        exec docker exec -it "$DB_CTR" \
+            mariadb -uwordpress -p"$DB_PASSWORD" wordpress
+        ;;
+
+    # -------------------------------------------------------------------------
+    # WP-CLI (interactive shell or one-shot command)
+    # -------------------------------------------------------------------------
+	--wpcli)
+		shift
+		# Read PHP version from .env to match the site's stack
+		[[ -r "$ENV_FILE" ]] || die "Cannot read $ENV_FILE"
+		PHP_VERSION=$(grep '^PHP_VERSION=' "$ENV_FILE" | cut -d= -f2)
+		DB_PASSWORD=$(grep '^DB_PASSWORD=' "$ENV_FILE" | cut -d= -f2)
+		[[ -n "$PHP_VERSION" && -n "$DB_PASSWORD" ]] || die "PHP_VERSION or DB_PASSWORD missing from $ENV_FILE"
+
+		WPCLI_IMAGE="wordpress:cli-php${PHP_VERSION}"
+		NET="${SITE}_internal"
+
+		# Common docker run args (interactive tty + volumes + creds)
+		DOCKER_ARGS=(
+		    --rm -it
+		    --network "$NET"
+		    --volumes-from "$WP_CTR"
+		    --user "33:33"
+		    -e HOME=/tmp
+		    -e WORDPRESS_DB_HOST=db:3306
+		    -e WORDPRESS_DB_NAME=wordpress
+		    -e WORDPRESS_DB_USER=wordpress
+		    -e WORDPRESS_DB_PASSWORD="$DB_PASSWORD"
+		)
+
+		if [[ $# -eq 0 ]]; then
+		    # Interactive: drop into bash where `wp` is available
+		    info "WP-CLI ready. Try: wp core version"
+		    exec docker run "${DOCKER_ARGS[@]}" --entrypoint bash "$WPCLI_IMAGE"
+		else
+		    # One-shot: run wp with the given args
+		    exec docker run "${DOCKER_ARGS[@]}" "$WPCLI_IMAGE" wp "$@"
+		fi
+        ;;
+
+    # -------------------------------------------------------------------------
+    # Upload plugin or theme
+    # -------------------------------------------------------------------------
+    --upload-plugin|--upload-theme)
+        if [[ "$MODE" == "--upload-plugin" ]]; then
+            KIND="plugins"; LABEL="plugin"
+        else
+            KIND="themes"; LABEL="theme"
+        fi
+
+        shift
+        SRC="${1:-}"
+        [[ -n "$SRC" ]] || die "$MODE requires a path"
+
+        # Expand leading ~ to $HOME
+        SRC="${SRC/#\~/$HOME}"
+        [[ -e "$SRC" ]] || die "Source '$SRC' does not exist"
+
+        DEST_DIR="/var/www/html/wp-content/$KIND"
+
+        info "Uploading $LABEL '$(basename "$SRC")' to $SITE..."
+
+        if [[ -d "$SRC" ]]; then
+            # Directory: copy as-is
+            TARGET_NAME="$(basename "$SRC")"
+            docker cp "$SRC" "$WP_CTR:$DEST_DIR/"
+        elif [[ "$SRC" == *.zip ]]; then
+            # Zip: extract on host, copy the extracted dir
+            command -v unzip >/dev/null || \
+                die "unzip not installed on host. Run: sudo apt install -y unzip"
+
+            TMPDIR="$(mktemp -d)"
+            trap 'rm -rf "$TMPDIR"' EXIT
+            unzip -oq "$SRC" -d "$TMPDIR"
+
+            # Zips usually contain a single top-level directory — use its name
+            TARGET_NAME="$(ls "$TMPDIR" | head -n1)"
+            [[ -n "$TARGET_NAME" ]] || die "Zip appears empty"
+
+            docker cp "$TMPDIR/$TARGET_NAME" "$WP_CTR:$DEST_DIR/"
+        else
+            die "Source must be a directory or a .zip file (got: $SRC)"
+        fi
+
+        # Fix ownership so WordPress can read/write it
+        docker exec "$WP_CTR" chown -R 33:33 "$DEST_DIR/$TARGET_NAME"
+
+        ok "Uploaded to $DEST_DIR/$TARGET_NAME"
+        echo ""
+        echo "Activate with:"
+        echo "  siteshell $SITE --wpcli $LABEL activate $TARGET_NAME"
+        ;;
+
+    # -------------------------------------------------------------------------
+    # Unknown option
+    # -------------------------------------------------------------------------
+    *)
+        echo "❌ Unknown option: $MODE" >&2
+        echo ""
+        usage
+        exit 1
+        ;;
+
+esac
