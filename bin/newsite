@@ -175,7 +175,9 @@ info "Waiting for $URL to respond..."
 
 WP_READY=false
 for i in {1..30}; do
-    if curl -sfk -o /dev/null -w '%{http_code}' "$URL" | grep -qE '^(200|301|302)$'; then
+    if curl -sfk -o /dev/null -w '%{http_code}' \
+        --resolve "${SITE}.${BASE_DOMAIN}:443:127.0.0.1" \
+        "$URL" | grep -qE '^(200|301|302)$'; then
         WP_READY=true
         break
     fi

@@ -40,7 +40,7 @@ services:
       - "traefik.http.routers.__SITE__.rule=Host(`__SITE__.test.vkuberan.in`)"
       - "traefik.http.routers.__SITE__.entrypoints=websecure"
       - "traefik.http.routers.__SITE__.tls=true"
-      - "traefik.http.routers.__SITE__.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.__SITE__.tls.certresolver=dnsresolver"
       - "traefik.http.services.__SITE__.loadbalancer.server.port=80"
 
 volumes:
