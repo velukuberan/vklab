@@ -47,3 +47,9 @@ If you kept a backup of `sites/` from before the disaster:
 3. For each site subdirectory, `cd` into it and run `docker compose up -d`.
 
 The Traefik labels in each site's `docker-compose.yml` mean Traefik will auto-discover them and route traffic without additional config. Certificates for existing site hostnames get re-issued automatically.
+
+### Restore git signing + agent (if starting from a clean droplet, not a snapshot)
+
+Snapshot restores already have `keychain`, git config, and the SSH key baked in — nothing to do.
+
+For a **from-scratch rebuild** (no snapshot available), re-run the "Git: passwordless pushes + signed commits" section from `04-testlab-install.md`. The private key itself must be re-generated (or restored from your offline backup) and re-registered on GitHub as both an Authentication Key and a Signing Key.

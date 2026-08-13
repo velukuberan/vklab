@@ -33,6 +33,68 @@ Test the connection:
 
 You should see a "Hi <username>!" message confirming auth works.
 
+## Git: passwordless pushes + signed commits
+
+Two quality-of-life fixes for working with the GitHub remote from the droplet:
+
+1. **`keychain`** — type the SSH key passphrase once per boot, not once per push
+2. **SSH commit signing** — get the green "Verified" badge on GitHub
+
+### 1. Silence the SSH key passphrase with `keychain`
+
+```bash
+sudo apt install -y keychain
+```
+
+Append to `~/.bashrc`:
+
+```bash
+# ssh-agent via keychain — type passphrase once per boot
+eval "$(keychain --eval --quiet --agents ssh ~/.ssh/github_ed25519)"
+```
+
+Reload the shell:
+
+```bash
+source ~/.bashrc
+```
+
+First shell after boot will prompt for the passphrase. Every subsequent shell (new SSH login, new tmux pane) inherits the running agent silently, until the droplet reboots.
+
+**Why not just strip the passphrase?** A passphrase-protected key means a stolen `id_ed25519` file alone can't push to GitHub. `keychain` gives us both — protection at rest, convenience during a session.
+
+### 2. Sign commits with the same SSH key
+
+GitHub shows an "Unverified" badge on any commit without a cryptographic signature. SSH keys can double as signing keys — same key file, different registration on GitHub.
+
+Configure git to sign every commit and tag with the existing SSH key:
+
+```bash
+git config --global gpg.format ssh
+git config --global user.signingkey ~/.ssh/github_ed25519.pub
+git config --global commit.gpgsign true
+git config --global tag.gpgsign true
+```
+
+Register the key on GitHub **a second time**, this time as a signing key:
+
+1. GitHub → **Settings → SSH and GPG keys → New SSH key**
+2. **Key type:** `Signing Key` (not Authentication Key)
+3. **Title:** e.g. `app-testing droplet (signing)`
+4. **Key:** paste the contents of `~/.ssh/github_ed25519.pub`
+
+Test:
+
+```bash
+cd /opt/testlab
+git commit --allow-empty -m "test: verify signing works"
+git push
+```
+
+The commit should show a green **Verified** badge on GitHub.
+
+**Note:** commits made *before* signing was configured stay "Unverified" — signatures are added at commit time, not retroactively. Rewriting history to sign old commits is possible but rarely worth it for a personal repo.
+
 ## Clone the repo to /opt/testlab
 
 The convention is to put system-level services under `/opt`. Clone directly there so the running system and the git repo are the same directory - edit once, changes reflect everywhere:
