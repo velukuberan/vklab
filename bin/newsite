@@ -53,6 +53,14 @@ randstr() {
     printf '%s' "$raw"
 }
 
+# Read the WordPress version currently on disk in the site's /var/www/html.
+# Returns "MISSING" if version.php isn't there yet.
+# Used to detect silent core upgrades during wp-cli operations.
+wp_version_on_disk() {
+    docker exec "${SITE}-wp" cat /var/www/html/wp-includes/version.php 2>/dev/null \
+        | grep -oP "wp_version = '\K[^']+" || echo "MISSING"
+}
+
 # -----------------------------------------------------------------------------
 # Parse positional arguments
 # -----------------------------------------------------------------------------
@@ -218,6 +226,14 @@ wpcli() {
 }
 
 # -----------------------------------------------------------------------------
+# DIAGNOSTIC: verify WP core files present before running wp-cli.
+# Also snapshot the version so we can detect any silent upgrade later.
+# -----------------------------------------------------------------------------
+V_INITIAL="$(wp_version_on_disk)"
+info "WP core on disk after entrypoint:  $V_INITIAL"
+[[ "$V_INITIAL" == "MISSING" ]] && die "WP core files missing from volume — entrypoint race condition"
+
+# -----------------------------------------------------------------------------
 # Install WordPress non-interactively
 # -----------------------------------------------------------------------------
 info "Installing WordPress via WP-CLI..."
@@ -229,6 +245,9 @@ wpcli wp core install \
     --admin_email="$ADMIN_EMAIL" \
     --skip-email > /dev/null
 
+V_AFTER_INSTALL="$(wp_version_on_disk)"
+info "WP core after 'wp core install':   $V_AFTER_INSTALL"
+
 # -----------------------------------------------------------------------------
 # Install and configure WP Mail SMTP plugin → mailpit
 # WP-CLI writes plugin config to DB. Actual mail sending happens later from
@@ -236,6 +255,9 @@ wpcli wp core install \
 # -----------------------------------------------------------------------------
 info "Installing WP Mail SMTP plugin and pointing it at mailpit..."
 wpcli wp plugin install wp-mail-smtp --activate --quiet
+
+V_AFTER_PLUGIN="$(wp_version_on_disk)"
+info "WP core after plugin install:      $V_AFTER_PLUGIN"
 
 SMTP_CONFIG=$(cat <<JSON
 {
@@ -261,6 +283,19 @@ JSON
 )
 
 wpcli wp option update wp_mail_smtp "$SMTP_CONFIG" --format=json > /dev/null
+
+V_FINAL="$(wp_version_on_disk)"
+info "WP core after option update:       $V_FINAL"
+
+# -----------------------------------------------------------------------------
+# Fail loudly if any wpcli step silently upgraded WP core.
+# This turns a silent bug into a visible one — better to fail newsite than
+# let a "6.5" site quietly become 7.0.4.
+# -----------------------------------------------------------------------------
+if [[ "$V_INITIAL" != "$V_FINAL" ]]; then
+    die "WP core was silently upgraded from $V_INITIAL to $V_FINAL during wp-cli operations.
+    Check the four 'WP core' lines above to see which step caused it."
+fi
 
 # -----------------------------------------------------------------------------
 # Save credentials file (for siteinfo)
