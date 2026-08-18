@@ -108,9 +108,13 @@ case "$MODE" in
 		WPCLI_IMAGE="wordpress:cli-php${PHP_VERSION}"
 		NET="${SITE}_internal"
 
-		# Common docker run args (interactive tty + volumes + creds)
+		# Common docker run args (volumes + creds). NOTE: no -it here — a TTY
+		# is only requested for the interactive branch below. Requesting one
+		# unconditionally broke every non-interactive/scripted call (e.g. from
+		# generatesites) with "cannot attach stdin to a TTY-enabled container
+		# because stdin is not a terminal".
 		DOCKER_ARGS=(
-		    --rm -it
+		    --rm
 		    --network "$NET"
 		    --volumes-from "$WP_CTR"
 		    --user "33:33"
@@ -124,9 +128,10 @@ case "$MODE" in
 		if [[ $# -eq 0 ]]; then
 		    # Interactive: drop into bash where `wp` is available
 		    info "WP-CLI ready. Try: wp core version"
-		    exec docker run "${DOCKER_ARGS[@]}" --entrypoint bash "$WPCLI_IMAGE"
+		    exec docker run -it "${DOCKER_ARGS[@]}" --entrypoint bash "$WPCLI_IMAGE"
 		else
-		    # One-shot: run wp with the given args
+		    # One-shot: run wp with the given args. No TTY needed — this now
+		    # works correctly from scripts/loops too, not just a real terminal.
 		    exec docker run "${DOCKER_ARGS[@]}" "$WPCLI_IMAGE" wp "$@"
 		fi
         ;;

@@ -99,6 +99,18 @@ done
 TEMPLATE_DIR="$TEMPLATES/$TEMPLATE"
 [[ -d "$TEMPLATE_DIR" ]] || die "Template '$TEMPLATE' not found in $TEMPLATES"
 
+# wp-mail-smtp is copied in from a local vendor cache instead of being
+# downloaded from wordpress.org at site-creation time (see the "Install and
+# configure WP Mail SMTP plugin" step below) — avoids a network dependency
+# on every single newsite run. Fail fast, before any containers are created,
+# if the cache hasn't been seeded yet.
+VENDOR_WP_MAIL_SMTP="$TESTLAB/vendor/wp-mail-smtp"
+[[ -d "$VENDOR_WP_MAIL_SMTP" ]] || die "wp-mail-smtp not found at $VENDOR_WP_MAIL_SMTP.
+Seed it with:
+  mkdir -p $TESTLAB/vendor && cd $TESTLAB/vendor
+  curl -LO https://downloads.wordpress.org/plugin/wp-mail-smtp.latest-stable.zip
+  unzip wp-mail-smtp.latest-stable.zip && rm wp-mail-smtp.latest-stable.zip"
+
 [[ "$SITE" =~ ^[a-z0-9]+$ ]] || die "Site name must be lowercase letters and numbers only (got: $SITE)"
 
 SITE_DIR="$SITES/$SITE"
@@ -250,11 +262,17 @@ info "WP core after 'wp core install':   $V_AFTER_INSTALL"
 
 # -----------------------------------------------------------------------------
 # Install and configure WP Mail SMTP plugin → mailpit
-# WP-CLI writes plugin config to DB. Actual mail sending happens later from
-# the WP container, which is on the `web` network alongside mailpit.
+# Copied in from the local vendor cache (docker cp, same mechanism siteshell
+# uses for --upload-plugin) instead of `wp plugin install wp-mail-smtp`,
+# which downloads from wordpress.org and made every newsite run depend on
+# that network call succeeding. WP-CLI writes plugin config to DB. Actual
+# mail sending happens later from the WP container, which is on the `web`
+# network alongside mailpit.
 # -----------------------------------------------------------------------------
-info "Installing WP Mail SMTP plugin and pointing it at mailpit..."
-wpcli wp plugin install wp-mail-smtp --activate --quiet
+info "Installing WP Mail SMTP plugin (from local vendor cache) and pointing it at mailpit..."
+docker cp "$VENDOR_WP_MAIL_SMTP" "${SITE}-wp:/var/www/html/wp-content/plugins/"
+docker exec "${SITE}-wp" chown -R 33:33 /var/www/html/wp-content/plugins/wp-mail-smtp
+wpcli wp plugin activate wp-mail-smtp --quiet
 
 V_AFTER_PLUGIN="$(wp_version_on_disk)"
 info "WP core after plugin install:      $V_AFTER_PLUGIN"
