@@ -125,43 +125,39 @@ while IFS= read -r site_json; do
     done < <(jq -r '.plugins[]?' <<<"$site_json")
 
     # -------------------------------------------------------------------
-    # 3. Apply default settings via `wp option patch insert`.
-    #    `insert` fails if the option row doesn't exist at all yet, so seed
-    #    each unique option as an empty JSON object first (ignore failure —
-    #    "already exists" is the expected outcome on every run after the
-    #    first setting for that option).
+    # 3. Apply default settings.
+    #    Originally this did per-key `wp option patch insert` calls, seeding
+    #    each intermediate level with '{}' first. That turned out to be
+    #    unsafe: re-running the '{}' seed against a level that already had
+    #    sibling keys silently wiped them instead of failing as expected, so
+    #    only the LAST setting in each nested group survived (e.g. only
+    #    turnstile.secret_key remained, turnstile.site_key got wiped out
+    #    when secret_key's seed step ran).
+    #
+    #    Fixed approach: merge every setting that shares the same option
+    #    name into one full nested JSON object (via jq's `setpath`), then
+    #    write it with a single `wp option update` per option. `update`
+    #    auto-creates the row if it doesn't exist yet (unlike `add`), so no
+    #    separate seeding step is needed at all, and there's no ordering
+    #    hazard since each option is written exactly once, fully formed.
     # -------------------------------------------------------------------
-    while IFS= read -r option_name; do
-        [[ -z "$option_name" ]] && continue
-        info "Seeding option row (if missing): $option_name"
-        siteshell "$SITE" --wpcli option add "$option_name" --format=json '{}' >/dev/null 2>&1 || true
-    done < <(jq -r '[.settings[]?.option] | unique[]?' <<<"$site_json")
+    while IFS= read -r merged_json; do
+        [[ -z "$merged_json" ]] && continue
+        OPTION="$(jq -r '.option' <<<"$merged_json")"
+        MERGED_VALUE="$(jq -c '.merged' <<<"$merged_json")"
+        MERGED_KEYS="$(jq -c '.merged | keys' <<<"$merged_json")"
 
-    while IFS= read -r setting_json; do
-        [[ -z "$setting_json" ]] && continue
-        OPTION="$(jq -r '.option' <<<"$setting_json")"
-        VALUE="$(jq -r '.value' <<<"$setting_json")"
-        mapfile -t PATH_PARTS < <(jq -r '.path[]?' <<<"$setting_json")
-
-        # `option patch insert` can only create ONE missing level at a time —
-        # it errors with "Cannot create key ... on data type NULL" if an
-        # intermediate level (e.g. "turnstile") doesn't exist yet either. So
-        # seed every intermediate level as an empty object first, shallowest
-        # to deepest. Failure here is expected once a level already exists
-        # (from an earlier setting sharing the same parent), so it's ignored.
-        if [[ "${#PATH_PARTS[@]}" -gt 1 ]]; then
-            for ((i = 1; i < ${#PATH_PARTS[@]}; i++)); do
-                PREFIX=("${PATH_PARTS[@]:0:i}")
-                siteshell "$SITE" --wpcli option patch insert "$OPTION" "${PREFIX[@]}" '{}' --format=json >/dev/null 2>&1 || true
-            done
-        fi
-
-        info "Setting: $OPTION ${PATH_PARTS[*]} = $VALUE"
-        if ! siteshell "$SITE" --wpcli option patch insert "$OPTION" "${PATH_PARTS[@]}" "$VALUE"; then
-            fail "$SITE — failed to set $OPTION ${PATH_PARTS[*]}"
+        info "Setting $OPTION $MERGED_KEYS"
+        if ! siteshell "$SITE" --wpcli option update "$OPTION" "$MERGED_VALUE" --format=json; then
+            fail "$SITE — failed to update $OPTION"
             SITE_WARNINGS=$((SITE_WARNINGS + 1))
         fi
-    done < <(jq -c '.settings[]?' <<<"$site_json")
+    done < <(jq -c '
+        (.settings // [])
+        | group_by(.option)
+        | map({option: .[0].option, merged: (reduce .[] as $s ({}; setpath($s.path; $s.value)))})
+        | .[]
+    ' <<<"$site_json")
 
     if [[ "$SITE_WARNINGS" -eq 0 ]]; then
         ok "$SITE — done, no issues"
